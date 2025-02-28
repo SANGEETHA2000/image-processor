@@ -42,7 +42,14 @@ console.log('Image processing worker started');
 
 if (require.main === module) {
     require('dotenv').config();
-    require('mongoose').connect(process.env.MONGODB_URI)
-        .then(() => console.log('Worker connected to MongoDB'))
-        .catch(err => console.error('Worker failed to connect to MongoDB', err));
+    require('mongoose').connect(process.env.MONGODB_URI, {
+        serverSelectionTimeoutMS: 30000,
+        socketTimeoutMS: 45000,
+        connectTimeoutMS: 30000,
+        waitQueueTimeoutMS: 30000,
+        keepAlive: true,
+        keepAliveInitialDelay: 30000
+      }).then(() => {
+            console.log('Worker connected to MongoDB with extended timeouts');
+      }).catch(err => console.error('Worker failed to connect to MongoDB', err));
 }

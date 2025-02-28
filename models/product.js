@@ -47,5 +47,6 @@ const productSchema = new mongoose.Schema({
         default: Date.now
     }
 }, { timestamps: true });
+productSchema.index({ requestId: 1, serialNumber: 1 });
 
 module.exports = mongoose.model('Product', productSchema);

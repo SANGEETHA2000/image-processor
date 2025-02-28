@@ -24,57 +24,41 @@ exports.processImage = async (jobData) => {
     // Create product-specific directory
     const productDir = path.join(uploadDir, `${requestId}/${productName}`);
     await mkdirAsync(productDir, { recursive: true });
+
+    let retries = 3;
+    let product = null;
     
     // Generate unique filename
     const filename = `${Date.now()}-${path.basename(new URL(inputUrl).pathname)}`;
     const outputPath = path.join(productDir, filename);
+
+    while (retries > 0 && !product) {
     
-    try {
-        // Find the product and mark image as processing
-        const product = await Product.findOne({ 
-            requestId,
-            serialNumber
-        });
-        
-        if (!product || !product.images[imageIndex]) {
-            throw new Error('Product or image not found');
-        }
-        
-        // Update status to processing
-        product.images[imageIndex].status = 'processing';
-        product.images[imageIndex].processingStartedAt = new Date();
-        await product.save();
-        
-        // Download and process the image
-        await downloadAndProcessImage(inputUrl, outputPath);
-        
-        // Generate public URL for the output image
-        const outputUrl = `${process.env.OUTPUT_IMAGE_BASE_URL}${requestId}/${productName}/${filename}`;
-        
-        // Update product with processed image details
-        product.images[imageIndex].outputUrl = outputUrl;
-        product.images[imageIndex].status = 'completed';
-        product.images[imageIndex].processingCompletedAt = new Date();
-        await product.save();
-        
-        // Update request progress
-        const request = await Request.findOne({ requestId });
-        await request.updateProgress();
-        
-        // Check if all processing is complete and trigger webhook if needed
-        if (request.isProcessingComplete() && request.webhookUrl) {
-            await sendWebhookNotification(request);
-        }
-        
-        return { success: true, outputUrl };
-    } catch (error) {
-        console.error(`Error processing image: ${error.message}`);
-        
-        // Update product with error details
-        const product = await Product.findOne({ requestId, serialNumber });
-        if (product && product.images[imageIndex]) {
-            product.images[imageIndex].status = 'failed';
-            product.images[imageIndex].errorMessage = error.message;
+        try {
+            // Find the product and mark image as processing
+            const product = await Product.findOne({ 
+                requestId,
+                serialNumber
+            }).maxTimeMS(15000);;
+            
+            if (!product || !product.images[imageIndex]) {
+                throw new Error('Product or image not found');
+            }
+            
+            // Update status to processing
+            product.images[imageIndex].status = 'processing';
+            product.images[imageIndex].processingStartedAt = new Date();
+            await product.save();
+            
+            // Download and process the image
+            await downloadAndProcessImage(inputUrl, outputPath);
+            
+            // Generate public URL for the output image
+            const outputUrl = `${process.env.OUTPUT_IMAGE_BASE_URL}${requestId}/${productName}/${filename}`;
+            
+            // Update product with processed image details
+            product.images[imageIndex].outputUrl = outputUrl;
+            product.images[imageIndex].status = 'completed';
             product.images[imageIndex].processingCompletedAt = new Date();
             await product.save();
             
@@ -86,9 +70,35 @@ exports.processImage = async (jobData) => {
             if (request.isProcessingComplete() && request.webhookUrl) {
                 await sendWebhookNotification(request);
             }
+            
+            return { success: true, outputUrl };
+        } catch (error) {
+            retries--;
+            console.log(`Database operation failed, retries left: ${retries}`);
+            if (retries <= 0) {
+                // Update product with error details
+                const product = await Product.findOne({ requestId, serialNumber });
+                if (product && product.images[imageIndex]) {
+                    product.images[imageIndex].status = 'failed';
+                    product.images[imageIndex].errorMessage = error.message;
+                    product.images[imageIndex].processingCompletedAt = new Date();
+                    await product.save();
+                    
+                    // Update request progress
+                    const request = await Request.findOne({ requestId });
+                    await request.updateProgress();
+                    
+                    // Check if all processing is complete and trigger webhook if needed
+                    if (request.isProcessingComplete() && request.webhookUrl) {
+                        await sendWebhookNotification(request);
+                    }
+                }
+
+                console.error(`Error processing image: ${error.message}`);
+                throw error;
+            }
+            await new Promise(resolve => setTimeout(resolve, (4 - retries) * 2000));   
         }
-        
-        throw error;
     }
 };
 
