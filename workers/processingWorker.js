@@ -8,14 +8,11 @@ console.log('Image processing worker started');
 const { imageProcessingQueue } = require('../config/bull');
 const { processImage } = require('../services/imageProcessor');
 
-console.log("URI",process.env.MONGODB_URI)
 require('mongoose').connect(process.env.MONGODB_URI, {
     serverSelectionTimeoutMS: 30000,
     socketTimeoutMS: 45000,
     connectTimeoutMS: 30000,
-    waitQueueTimeoutMS: 30000,
-    keepAlive: true,
-    keepAliveInitialDelay: 30000
+    waitQueueTimeoutMS: 30000
 }).then(() => {
     console.log('Worker connected to MongoDB with extended timeouts');
     // Process jobs from the queue
