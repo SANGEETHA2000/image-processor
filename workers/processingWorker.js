@@ -41,7 +41,10 @@ imageProcessingQueue.on('error', (error) => {
 console.log('Image processing worker started');
 
 if (require.main === module) {
-    require('dotenv').config();
+    require('dotenv').config({ 
+        path: path.resolve(__dirname, '../.env') 
+    });
+    console.log("URI",process.env.MONGODB_URI)
     require('mongoose').connect(process.env.MONGODB_URI, {
         serverSelectionTimeoutMS: 30000,
         socketTimeoutMS: 45000,
